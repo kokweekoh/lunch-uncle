@@ -12,5 +12,8 @@
   "license": "MIT",
   "devDependencies": {
     "wrangler": "^4.0.0"
+  },
+  "allowScripts": {
+    "workerd@1.20260825.1": true
   }
 }

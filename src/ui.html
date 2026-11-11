@@ -77,8 +77,11 @@
         const data = await res.json();
         const reply = data.reply ?? data.error ?? "No reply.";
         thinking.textContent = reply;
-        history.push({ role: "user", content: message });
-        history.push({ role: "assistant", content: reply });
+        // Only remember real replies, not error messages.
+        if (res.ok && data.reply) {
+          history.push({ role: "user", content: message });
+          history.push({ role: "assistant", content: reply });
+        }
       } catch (err) {
         thinking.textContent = "Cannot reach Uncle. Try again.";
       } finally {

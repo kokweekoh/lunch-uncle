@@ -12,6 +12,7 @@ export const CT_HUB_2 = { latitude: 1.3115, longitude: 103.8615 };
 const SEARCH_RADIUS_METRES = 800;
 const MAX_PLACES = 10;
 const FORECAST_AREA = "Kallang";
+const TOOL_TIMEOUT_MS = 8_000;
 
 const PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
 const FORECAST_URL =
@@ -83,15 +84,26 @@ export const toolDefinitions = [
  * Run one tool call requested by the model and return the result as a string.
  */
 export async function executeTool(name, args, env) {
+  // A tool that crashes or times out should not sink the whole reply.
+  // Hand the model an error instead, so Uncle can carry on without it.
+  try {
+    return JSON.stringify(await runTool(name, args, env));
+  } catch (err) {
+    console.error(`tool ${name} failed:`, err);
+    return JSON.stringify({ error: `${name} is not working right now` });
+  }
+}
+
+async function runTool(name, args, env) {
   switch (name) {
     case "find_lunch_places":
-      return JSON.stringify(await findLunchPlaces(args, env));
+      return findLunchPlaces(args, env);
     case "get_rain_forecast":
-      return JSON.stringify(await getRainForecast());
+      return getRainForecast();
     case "get_bus_arrivals":
-      return JSON.stringify(await getBusArrivals(args));
+      return getBusArrivals(args);
     default:
-      return JSON.stringify({ error: `Unknown tool: ${name}` });
+      return { error: `Unknown tool: ${name}` };
   }
 }
 
@@ -100,15 +112,17 @@ export async function executeTool(name, args, env) {
 // ---------------------------------------------------------------------------
 
 async function findLunchPlaces({ query, open_now = false }, env) {
-  const centre = { latitude: 1.3236, longitude: 103.9273 };
+  const centre = CT_HUB_2;
 
   const body = {
     textQuery: query,
     includedType: "restaurant",
     openNow: open_now,
     pageSize: MAX_PLACES,
-    locationBias: {
-      circle: { center: centre, radius: SEARCH_RADIUS_METRES },
+    // Restriction, not bias: only return places inside the walking area.
+    // Text Search only accepts a rectangle here, so build one around CT Hub 2.
+    locationRestriction: {
+      rectangle: boundingBox(centre, SEARCH_RADIUS_METRES),
     },
   };
 
@@ -121,6 +135,7 @@ async function findLunchPlaces({ query, open_now = false }, env) {
         "places.id,places.displayName,places.location,places.rating,places.currentOpeningHours",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(TOOL_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -135,11 +150,28 @@ async function findLunchPlaces({ query, open_now = false }, env) {
  * Shape Places API results into the fields Uncle needs.
  */
 export function formatPlaces(places, origin) {
-  return places.map(({ displayName, rating, location }) => ({
+  return places.map(({ displayName, rating, location, currentOpeningHours }) => ({
     name: displayName?.text ?? "Unnamed",
     rating: rating ?? null,
-    distance_m: Math.round(haversineMetres(origin, location)),
+    distance_m: location ? Math.round(haversineMetres(origin, location)) : null,
+    open_now: currentOpeningHours?.openNow ?? null,
   }));
+}
+
+/**
+ * A square of roughly `radiusMetres` on each side of `centre`, as the
+ * {low, high} rectangle that Places Text Search expects.
+ */
+export function boundingBox(centre, radiusMetres) {
+  const METRES_PER_DEG_LAT = 111_320;
+  const dLat = radiusMetres / METRES_PER_DEG_LAT;
+  const dLon =
+    radiusMetres /
+    (METRES_PER_DEG_LAT * Math.cos((centre.latitude * Math.PI) / 180));
+  return {
+    low: { latitude: centre.latitude - dLat, longitude: centre.longitude - dLon },
+    high: { latitude: centre.latitude + dLat, longitude: centre.longitude + dLon },
+  };
 }
 
 /**
@@ -163,7 +195,9 @@ export function haversineMetres(a, b) {
 // ---------------------------------------------------------------------------
 
 async function getRainForecast() {
-  const res = await fetch(FORECAST_URL);
+  const res = await fetch(FORECAST_URL, {
+    signal: AbortSignal.timeout(TOOL_TIMEOUT_MS),
+  });
   if (!res.ok) {
     return { error: `Forecast API returned ${res.status}` };
   }
@@ -178,7 +212,7 @@ export function formatForecast(payload, area) {
   if (!item) {
     return { error: "No forecast available" };
   }
-  const entry = item.forecasts.find((f) => f.area === area);
+  const entry = (item.forecasts ?? []).find((f) => f.area === area);
   return {
     area,
     forecast: entry?.forecast ?? "Unknown",
@@ -192,7 +226,7 @@ export function formatForecast(payload, area) {
 
 async function getBusArrivals({ stop_code }) {
   const url = `${BUS_URL}?id=${encodeURIComponent(stop_code)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(TOOL_TIMEOUT_MS) });
   if (!res.ok) {
     return { error: `Bus API returned ${res.status}` };
   }

@@ -20,7 +20,8 @@ How you work:
  * Build the system prompt for one request.
  */
 export function buildSystemPrompt() {
-  const requestId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  return `Request ${requestId} at ${now}. ${PERSONA}`;
+  // Keep the fixed persona first so the provider can cache it; put the
+  // changing part (the current time) at the end.
+  const now = new Date().toLocaleString("en-SG", { timeZone: "Asia/Singapore" });
+  return `${PERSONA}\n\nCurrent time in Singapore: ${now}.`;
 }
