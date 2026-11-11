@@ -122,6 +122,9 @@
 
     const GREETING = "Eh, what you want to eat? Don't waste my time.";
     const STORAGE_KEY = "lunch-uncle-chat";
+    // The server only reads the latest 20 messages (MAX_HISTORY_MESSAGES in
+    // src/loop.js), so don't keep, save or send more than that.
+    const MAX_HISTORY_MESSAGES = 20;
 
     // Conversation so far, in the shape the /chat endpoint expects, plus one
     // id for the whole conversation so the AI provider can reuse its cache.
@@ -140,7 +143,7 @@
       try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
         if (saved && Array.isArray(saved.history) && typeof saved.sessionId === "string") {
-          history = saved.history;
+          history = saved.history.slice(-MAX_HISTORY_MESSAGES);
           sessionId = saved.sessionId;
         }
       } catch {}
@@ -260,6 +263,7 @@
           // Only remember real replies, not error messages.
           history.push({ role: "user", content: message });
           history.push({ role: "assistant", content: data.reply });
+          history = history.slice(-MAX_HISTORY_MESSAGES);
           save();
         } else {
           showError(thinking.div, data.error || "Uncle got nothing to say. Try again.", message);

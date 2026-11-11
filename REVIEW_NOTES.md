@@ -234,6 +234,7 @@ These are improvements, not bug fixes. Everything is in `src/ui.html`, in plain 
 | **A friendlier wait** | Animated dots, then "Uncle checking the area..." after 4 s and "Still thinking, don't rush him..." after 12 s, so a 15-second wait doesn't look frozen. |
 | **Errors get a "Try again" button** | Errors now show in a red bubble with a "Try again" button that resends the same question, without showing it twice. A blank reply from Uncle is also treated as an error instead of an empty bubble. |
 | **The chat survives a refresh** | The conversation and its ID are saved in the browser (`localStorage`). If the browser blocks storage, for example in a private window, the page still works; it just doesn't remember. |
+| **The page only keeps the latest 20 messages** | The server only ever reads the last 20 messages, but the page used to keep, save and send the whole conversation, so a long chat uploaded more and more text that was thrown away. Now the page trims to 20 too, matching `MAX_HISTORY_MESSAGES` in `src/loop.js`. Earlier messages stay on screen until you refresh. |
 | **"New chat" button** | Clears the conversation, starts a new conversation ID, and brings the starter buttons back. |
 | **Phone-friendly** | The layout fits the visible screen (`100dvh`), keeps clear of the iPhone notch and home bar, and uses a 16 px input so iPhones don't zoom in when you tap it. |
 | **Dark mode** | Follows the phone's or computer's light/dark setting. |
@@ -245,6 +246,7 @@ These are improvements, not bug fixes. Everything is in `src/ui.html`, in plain 
 - After a refresh, the conversation was still there.
 - At phone size in dark mode, with the network faked as offline, the red error and "Try again" appeared. After the network was restored, "Try again" got a real answer, with the question shown only once.
 - "New chat" cleared everything and brought the starter buttons back.
+- With a fake 30-message chat saved and a faked reply (no AI cost), the page loaded the latest 20, sent 20, and saved 20 after the reply, dropping the oldest.
 
 ## Summary of changed files
 
