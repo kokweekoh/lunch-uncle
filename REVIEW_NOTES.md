@@ -223,6 +223,29 @@ Four reviewers looked at the code again, each through one lens: promises vs code
   - **The search cache:** after these chats, Wrangler's local cache folder held the saved search results.
 - **Not checked live:** whether the AI service actually reuses its cache between turns. The app doesn't log usage numbers yet, which is one of the medium findings still open.
 
+## Part 6: Making the chat page nicer to use (quick wins)
+
+These are improvements, not bug fixes. Everything is in `src/ui.html`, in plain HTML, CSS and JavaScript, so the project still has no build step and no extra packages.
+
+| What changed | Why it helps |
+|---|---|
+| **Bold text and lists display properly** | Uncle writes `**WOW Chicken Rice**`. Before, you saw the asterisks; now it shows in bold. The page first makes all of Uncle's text harmless (it "escapes" it), so the AI can never sneak real HTML or scripts onto the page. |
+| **Starter buttons**: "Cheap and fast lah", "Somewhere with aircon", "Will it rain later?", "Uncle, decide for me" | A new user knows what to ask and can start with one tap on a phone. They hide once the chat starts. |
+| **A friendlier wait** | Animated dots, then "Uncle checking the area..." after 4 s and "Still thinking, don't rush him..." after 12 s, so a 15-second wait doesn't look frozen. |
+| **Errors get a "Try again" button** | Errors now show in a red bubble with a "Try again" button that resends the same question, without showing it twice. A blank reply from Uncle is also treated as an error instead of an empty bubble. |
+| **The chat survives a refresh** | The conversation and its ID are saved in the browser (`localStorage`). If the browser blocks storage, for example in a private window, the page still works; it just doesn't remember. |
+| **"New chat" button** | Clears the conversation, starts a new conversation ID, and brings the starter buttons back. |
+| **Phone-friendly** | The layout fits the visible screen (`100dvh`), keeps clear of the iPhone notch and home bar, and uses a 16 px input so iPhones don't zoom in when you tap it. |
+| **Dark mode** | Follows the phone's or computer's light/dark setting. |
+| **Accessibility** | Screen readers announce Uncle's new messages, the input has a proper label, and keyboard focus is clearly visible. |
+
+**How it was checked** (in the app's built-in browser):
+- The formatter turned bold text, numbered lists and bullets into real formatting, and showed an `<img onerror=...>` trick as plain text.
+- A real chat started from a starter button showed the dots, then the status line, then a reply with real bold text.
+- After a refresh, the conversation was still there.
+- At phone size in dark mode, with the network faked as offline, the red error and "Try again" appeared. After the network was restored, "Try again" got a real answer, with the question shown only once.
+- "New chat" cleared everything and brought the starter buttons back.
+
 ## Summary of changed files
 
 | File | What changed |
@@ -230,6 +253,7 @@ Four reviewers looked at the code again, each through one lens: promises vs code
 | `src/loop.js` | Filled in the two TODOs, removed the food-word bug, fixed the endless loop, added a user-agent, added `cleanHistory` |
 | `src/index.js` | Refuses messages over 2,000 characters, rate-limits /chat, passes the conversation ID |
 | `src/ui.html` (again) | Sends one conversation ID per page load |
+| `src/ui.html` (quick wins) | Formatting, starter buttons, friendlier wait, Try again, saved chat, New chat, phone layout, dark mode, accessibility |
 | `wrangler.toml` | Adds the `CHAT_LIMITER` rate limit (10 chats a minute per address) |
 | `test/high-fixes.test.js` | Tests for the time note, fixed system message, today's hours and conversation ID |
 | `src/tools.js` | Search centred on CT Hub 2 instead of Bedok and kept inside the area, kept open/closed status, catches tool failures, adds timeouts, adds today's hours, caches searches for 10 minutes |
