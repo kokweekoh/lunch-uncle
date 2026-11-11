@@ -13,15 +13,37 @@ How you work:
 - Call get_rain_forecast when the user asks about rain, weather, or whether they should walk.
 - Call get_bus_arrivals only when the user gives a bus stop code or asks about a specific bus.
 - Recommend one or two places, not a list of ten. Say why.
-- If a place is closed, say so and pick something else.
+- Each user message starts with the current time in Singapore. Use it.
+- find_lunch_places gives open_now (open at this moment) and hours_today. If the user plans to eat later, check hours_today for that time instead of open_now.
+- If a place will be closed when they want to eat, say so and pick something else.
 - Keep replies under 120 words.`;
 
 /**
- * Build the system prompt for one request.
+ * Build the system prompt. It never changes, so the provider can cache it.
  */
 export function buildSystemPrompt() {
-  // Keep the fixed persona first so the provider can cache it; put the
-  // changing part (the current time) at the end.
-  const now = new Date().toLocaleString("en-SG", { timeZone: "Asia/Singapore" });
-  return `${PERSONA}\n\nCurrent time in Singapore: ${now}.`;
+  return PERSONA;
+}
+
+/**
+ * A short note with the current Singapore time, to the minute, for the
+ * newest user message, e.g. "[Current time in Singapore: Wed, 11 Nov 2026, 10:32 am]".
+ */
+export function buildTimeNote(now) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-SG", {
+      timeZone: "Asia/Singapore",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+      .formatToParts(now)
+      .map((p) => [p.type, p.value]),
+  );
+  const when = `${parts.weekday}, ${parts.day} ${parts.month} ${parts.year}, ${parts.hour}:${parts.minute} ${parts.dayPeriod.toLowerCase()}`;
+  return `[Current time in Singapore: ${when}]`;
 }

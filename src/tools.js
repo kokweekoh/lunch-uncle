@@ -13,6 +13,10 @@ const SEARCH_RADIUS_METRES = 800;
 const MAX_PLACES = 10;
 const FORECAST_AREA = "Kallang";
 const TOOL_TIMEOUT_MS = 8_000;
+// Same search again within this window reuses the saved answer instead of
+// paying Google again.
+const PLACES_CACHE_SECONDS = 600;
+const SG_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 const PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
 const FORECAST_URL =
@@ -29,7 +33,7 @@ export const toolDefinitions = [
     function: {
       name: "find_lunch_places",
       description:
-        "Search for places to eat near CT Hub 2. Returns name, rating, distance and whether it is open now.",
+        "Search for places to eat near CT Hub 2. Returns name, rating, distance in metres, open_now (open at this moment) and hours_today (today's opening hours).",
       parameters: {
         type: "object",
         properties: {
@@ -40,7 +44,8 @@ export const toolDefinitions = [
           },
           open_now: {
             type: "boolean",
-            description: "Only return places that are open right now.",
+            description:
+              "Only return places open at this exact moment. Do not use it when the user plans to eat later; check hours_today instead.",
           },
         },
         required: ["query"],
@@ -114,6 +119,21 @@ async function runTool(name, args, env) {
 async function findLunchPlaces({ query, open_now = false }, env) {
   const centre = CT_HUB_2;
 
+  // Check the short-lived cache first. caches only exists inside Workers.
+  const cache = typeof caches !== "undefined" ? caches.default : null;
+  const cacheKey = new Request(
+    `https://places-cache.lunch-uncle.internal/?q=${encodeURIComponent(
+      String(query ?? "").trim().toLowerCase(),
+    )}&open=${open_now ? 1 : 0}`,
+  );
+  if (cache) {
+    const hit = await cache.match(cacheKey);
+    if (hit) {
+      const data = await hit.json();
+      return { places: formatPlaces(data.places ?? [], centre) };
+    }
+  }
+
   const body = {
     textQuery: query,
     includedType: "restaurant",
@@ -143,19 +163,45 @@ async function findLunchPlaces({ query, open_now = false }, env) {
   }
 
   const data = await res.json();
+  if (cache) {
+    // Save Google's raw answer, so hours_today is still worked out fresh.
+    await cache.put(
+      cacheKey,
+      new Response(JSON.stringify(data), {
+        headers: {
+          "content-type": "application/json",
+          "cache-control": `max-age=${PLACES_CACHE_SECONDS}`,
+        },
+      }),
+    );
+  }
   return { places: formatPlaces(data.places ?? [], centre) };
 }
 
 /**
  * Shape Places API results into the fields Uncle needs.
+ *
+ * hours_today is today's line from Google's weekly hours, so Uncle can tell
+ * whether a place will be open at a later lunch time, not just right now.
  */
-export function formatPlaces(places, origin) {
+export function formatPlaces(places, origin, now = new Date()) {
+  const dayIndex = singaporeWeekdayIndex(now);
   return places.map(({ displayName, rating, location, currentOpeningHours }) => ({
     name: displayName?.text ?? "Unnamed",
     rating: rating ?? null,
     distance_m: location ? Math.round(haversineMetres(origin, location)) : null,
     open_now: currentOpeningHours?.openNow ?? null,
+    hours_today: currentOpeningHours?.weekdayDescriptions?.[dayIndex] ?? null,
   }));
+}
+
+/**
+ * Today's position in Google's weekdayDescriptions list, which runs
+ * Monday (0) to Sunday (6), using the date in Singapore.
+ */
+export function singaporeWeekdayIndex(now) {
+  const sundayFirst = new Date(now.getTime() + SG_OFFSET_MS).getUTCDay();
+  return (sundayFirst + 6) % 7;
 }
 
 /**

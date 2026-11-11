@@ -77,5 +77,6 @@ test("formatPlaces measures from CT Hub 2 and keeps open-now status", () => {
     rating: null,
     distance_m: null,
     open_now: null,
+    hours_today: null,
   });
 });

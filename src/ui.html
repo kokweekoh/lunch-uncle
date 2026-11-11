@@ -48,6 +48,9 @@
 
     // Conversation so far, in the shape the /chat endpoint expects.
     const history = [];
+    // One id for this whole conversation, so the AI provider can reuse its
+    // cache from turn to turn. Reloading the page starts a new conversation.
+    const sessionId = crypto.randomUUID();
 
     function addBubble(role, text) {
       const div = document.createElement("div");
@@ -72,7 +75,7 @@
         const res = await fetch("/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ history, message }),
+          body: JSON.stringify({ history, message, session_id: sessionId }),
         });
         const data = await res.json();
         const reply = data.reply ?? data.error ?? "No reply.";
